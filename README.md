@@ -45,6 +45,7 @@ A fully open-source Streamlit application that leverages an Ollama LLM and RAG (
 ## Usage
 
 1. Open your browser to `http://localhost:8501`.
+   
 2. Fill in the form with:
    - **Startup Idea**: e.g., "Biodegradable pellets from waste"
    - **Country**: e.g., "United States"
@@ -55,18 +56,11 @@ A fully open-source Streamlit application that leverages an Ollama LLM and RAG (
    - **Key Technologies**: e.g., "Eco-friendly manufacturing"
    - **Funding Goals**: e.g., "$100,000"
    - **Timeline to Launch**: e.g., "6 months"
+
 3. Click "Analyze My Idea" to generate a detailed report.
 
 
-## Dependencies
-- `streamlit`: Web app framework
-- `requests`: HTTP requests for Ollama API
-- `json`: JSON parsing
-- `re`: Regular expressions for formatting
 
-  Install via:
-  ```bash
-  pip install streamlit requests
 
 ## Contributing
 Contributions are welcome! Please:
