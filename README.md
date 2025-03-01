@@ -22,7 +22,7 @@ A fully open-source Streamlit application that leverages an Ollama LLM and RAG (
 ### Steps
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/startup-idea-analyzer.git
+   git clone https://github.com/pranav6226/startup-rag.git
    cd startup-idea-analyzer
 2. **Set Up a Virtual Environment** (recommended):
    ```bash
