@@ -58,15 +58,6 @@ A fully open-source Streamlit application that leverages an Ollama LLM and RAG (
 3. Click "Analyze My Idea" to generate a detailed report.
 
 
-## Project Structure
-
-startup-idea-analyzer/
-├── app.py                # Main Streamlit application
-├── ollama_integration.py # LLM and RAG agent logic
-├── requirements.txt      # Dependencies
-└── README.md             # Project documentation
-
-
 ## Dependencies
 - `streamlit`: Web app framework
 - `requests`: HTTP requests for Ollama API
