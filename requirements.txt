@@ -1,4 +1,4 @@
 streamlit
-ollama
+requests
 crawl4ai
-duckduckgo-search
+googlesearch-python
