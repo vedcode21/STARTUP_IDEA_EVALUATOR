@@ -1,103 +1,154 @@
-import requests
-import json
+import subprocess
+import sys
 import re
+import matplotlib.pyplot as plt
+import os
 
-OLLAMA_URL = 'http://localhost:11434'
+OLLAMA_BIN = "ollama"
+MODEL = "tinyllama"
 
-def generate_search_queries(idea, country, target_market, budget, stage_of_development, key_technologies):
-    """
-    Generate specific search queries for evaluating a startup idea with additional context.
-    
-    Args:
-        idea (str): The startup idea.
-        country (str): The country of operation.
-        target_market (str): The target market segment.
-        budget (str): The budget in dollars.
-        stage_of_development (str): Current stage (e.g., ideation, MVP).
-        key_technologies (str): Technologies used.
-    
-    Returns:
-        list: A list of tailored search queries.
-    """
+# ─── SMOKE TEST ───
+
+def smoke_test(model: str):
+    try:
+        proc = subprocess.run(
+            [OLLAMA_BIN, "run", model, "Hello!"],
+            text=True, capture_output=True, check=True
+        )
+        out = proc.stdout.strip()
+        if not out:
+            print(f"⛔ [smoke test {model}] returned no output. Is it installed?")
+            sys.exit(1)
+        print(f"✅ [smoke test {model}] OK → {out!r}")
+    except Exception as e:
+        print(f"⛔ [smoke test {model}] FAILED: {e}")
+        sys.exit(1)
+
+smoke_test(MODEL)
+
+# ─── INVOKE OLLAMA ───
+
+def _invoke_ollama(prompt: str) -> str:
+    try:
+        proc = subprocess.run(
+            [OLLAMA_BIN, "run", MODEL],
+            input=prompt,
+            text=True,
+            encoding="utf-8",
+            errors="ignore",
+            capture_output=True,
+            check=True,
+        )
+        return proc.stdout or ""
+    except subprocess.CalledProcessError as e:
+        print(f"❌ [{MODEL}] error:\n{e.stderr.strip()}")
+        return ""
+
+# ─── GENERATE SEARCH QUERIES ───
+
+def generate_search_queries(
+    idea: str,
+    country: str,
+    target_market: str,
+    budget: str,
+    stage_of_development: str,
+    key_technologies: str,
+) -> list[str]:
     prompt = (
-        f"Generate specific search queries to gather data for evaluating the startup idea '{idea}' in {country}, "
-        f"targeting '{target_market}' with a budget of ${budget}. The startup is at the '{stage_of_development}' stage "
-        f"and uses technologies like '{key_technologies}'. Include queries for:\n"
-        f"1. Market size and growth trends for '{idea}' in {country}.\n"
-        f"2. Top competitors in the space of '{idea}' using similar technologies.\n"
-        f"3. User adoption rates and engagement metrics for similar ideas at the '{stage_of_development}' stage.\n"
-        f"4. Cost estimates for developing '{idea}' with {key_technologies}.\n"
-        f"5. Successful business models for '{idea}'.\n"
-        f"6. Partnerships and integrations common in the industry of '{idea}'.\n"
-        f"Ensure the queries are detailed and tailored to the idea's unique aspects."
+        f"Generate 6 specific Google search queries to evaluate the startup idea '{idea}' "
+        f"in {country}, targeting '{target_market}', with a budget of ${budget}, at the "
+        f"'{stage_of_development}' stage, using {key_technologies}. List one query per line."
     )
-    
-    # Send request to Ollama API
-    response = requests.post(f'{OLLAMA_URL}/api/generate', json={'model': 'llama3', 'prompt': prompt})
-    
-    if response.status_code != 200:
-        print(f"Error generating queries: Received status code {response.status_code}")
-        return []
-    
+    print("📝 [prompt] →\n", prompt, "\n" + "-"*50)
+    full_text = _invoke_ollama(prompt)
+    print("📬 [stdout] →\n", full_text, "\n" + "-"*50)
+
+    quoted = re.findall(r'"([^"]+)"', full_text)
     queries = []
-    for line in response.text.splitlines():
-        if line.strip():
-            try:
-                data = json.loads(line)
-                if 'response' in data:
-                    queries.append(data['response'])
-            except json.JSONDecodeError as e:
-                print(f"Failed to parse line: {line} - Error: {e}")
-                continue
-    
-    # Concatenate response chunks without extra spaces
-    full_text = ''.join(queries)
-    # Split into individual lines
-    lines = full_text.split('\n')
-    
-    # Define pattern for search queries: number, period, optional whitespace, quoted text
-    query_pattern = r'^\d+\.\s*"(.*)"'
-    extracted_queries = []
-    
-    # Filter and extract queries
-    for line in lines:
-        match = re.match(query_pattern, line.strip())
-        if match:
-            # Extract the text inside the quotes
-            extracted_queries.append(match.group(1))
-    
-    return extracted_queries
-# Updated generate_analysis function
+    for q in quoted:
+        q = q.strip()
+        if q and q not in queries:
+            queries.append(q)
+        if len(queries) >= 6:
+            break
 
-def generate_analysis(scraped_data, idea, country, target_market, budget, stage_of_development, team_size, key_technologies, funding_goals, timeline_to_launch):
-    # Combine scraped data into a single string
-    combined_data = "\n".join([data.get('content', '') or '' if isinstance(data, dict) else '' for data in scraped_data])
-    
-    # Prompt to get all content (we'll format it later)
-    prompt = (
-        f"Generate a detailed analysis for the startup idea '{idea}' in {country}, targeting '{target_market}' "
-        f"with a budget of ${budget}. Include insights on market research, competitors, feasibility, budget needs, "
-        f"business model, requirements to start, SWOT analysis, risks, scalability, and customer acquisition costs. "
-        f"Use the scraped data below:\n\n{combined_data}"
-    )
-    
-    # Send request to Ollama API with streaming
-    response = requests.post(f'{OLLAMA_URL}/api/generate', json={'model': 'llama3', 'prompt': prompt}, stream=True)
-    if response.status_code != 200:
-        return "Unable to generate report due to API error."
-    
-    # Collect the full response
-    report_parts = []
-    for line in response.iter_lines():
-        if line:
-            data = json.loads(line)
-            if 'response' in data:
-                report_parts.append(data['response'])
-            if data.get('done', False):
+    if not queries:
+        for line in full_text.splitlines():
+            q = line.strip()
+            if q and q not in queries:
+                queries.append(q)
+            if len(queries) >= 6:
                 break
-    full_report = ''.join(report_parts)
-    
-    # Define your desired sections in order
+
+    print(f"📋 Parsed queries ({len(queries)}): {queries}")
+    return queries
+
+# ─── GENERATE DETAILED ANALYSIS ───
+
+def plot_swot():
+    labels = ['Strengths', 'Weaknesses', 'Opportunities', 'Threats']
+    sizes = [25, 25, 30, 20]
+    colors = ['green', 'red', 'blue', 'orange']
+    plt.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%')
+    plt.title("SWOT Summary")
+    if not os.path.exists("charts"):
+        os.makedirs("charts")
+    path = os.path.join("charts", "swot_chart.png")
+    plt.savefig(path)
+    plt.close()
+    return path
+
+def generate_analysis(
+    scraped_data: list[dict],
+    idea: str,
+    country: str,
+    target_market: str,
+    budget: str,
+    stage_of_development: str,
+    team_size: int,
+    key_technologies: str,
+    funding_goals: str,
+    timeline_to_launch: str,
+) -> str:
+    combined = "\n".join(item.get("content", "")[:1000] for item in scraped_data[:2])
+    scraped_prompt = (
+        f"You're an expert startup analyst. Based on the following scraped content and startup details, craft a pitch-perfect, structured report in markdown.\n"
+        f"Startup: '{idea}' in {country}\nTarget Market: '{target_market}'\nBudget: ${budget}, Team Size: {team_size}\n"
+        f"Technologies: {key_technologies}\nStage: {stage_of_development}\nFunding Goal: ${funding_goals}\nLaunch Timeline: {timeline_to_launch} months\n"
+        "Structure using **only these markdown headings (##)**, and include meaningful insights even if scraped data is limited. Never skip or omit a section:\n"
+        "## Market Research\n## Competitor Analysis\n## Feasibility\n## Budget Requirements\n## Business Outline\n"
+        "## Requirements to Get Started\n## SWOT Analysis\n## Risk Assessment\n## Scalability Potential\n## Customer Acquisition Cost (CAC) Estimate\n"
+        f"\nScraped Data:\n{combined}"
+    )
+    print("📝 [SCRAPED‑DATA PROMPT] →\n", scraped_prompt, "\n" + "-"*60)
+    report = _invoke_ollama(scraped_prompt)
+    print("📬 [SCRAPED‑DATA OUTPUT] →\n", report, "\n" + "-"*60)
+
+    if not re.search(r'##+\s*Market Research|^Market Research:', report, re.MULTILINE):
+        fallback_prompt = scraped_prompt.replace(f"\nScraped Data:\n{combined}", "")
+        print("⚠️ [FALLBACK to model‑only prompt]")
+        print("📝 [KNOWLEDGE‑ONLY PROMPT] →\n", fallback_prompt, "\n" + "-"*60)
+        report = _invoke_ollama(fallback_prompt)
+        print("📬 [KNOWLEDGE‑ONLY OUTPUT] →\n", report, "\n" + "-"*60)
+
+    def get_section(name: str) -> str:
+        pat_md = rf'##+\s*{re.escape(name)}(.*?)(?=\n##+|\Z)'
+        m = re.search(pat_md, report, re.DOTALL | re.IGNORECASE)
+        if m and m.group(1).strip():
+            content = m.group(1).strip()
+        else:
+            pat_plain = rf'^{re.escape(name)}:\s*(.*?)(?=\n^[A-Z][A-Za-z ]+:\s|\Z)'
+            m2 = re.search(pat_plain, report, re.MULTILINE | re.DOTALL)
+            if m2 and m2.group(1).strip():
+                content = m2.group(1).strip()
+            else:
+                return f"- *{name} not directly found; no structured insight extracted.*"
+        if name.lower().startswith("competitor analysis"):
+            tbl = re.search(r'(\|.*\|\n)(\|[-:\s]+\|\n)(?:\|.*\|\n)+', content)
+            return tbl.group(0) if tbl else content
+        bullets = re.findall(r'-\s*(.+)', content)
+        return "\n".join(f"- {b}" for b in bullets) if bullets else content
+
     sections = [
         "Market Research",
         "Competitor Analysis",
@@ -108,42 +159,18 @@ def generate_analysis(scraped_data, idea, country, target_market, budget, stage_
         "SWOT Analysis",
         "Risk Assessment",
         "Scalability Potential",
-        "Customer Acquisition Cost (CAC) Estimate"
+        "Customer Acquisition Cost (CAC) Estimate",
     ]
-    
-    # Extract content for a section
-    def extract_section_content(section_name):
-        pattern = rf'(?i)(?:## |### |#### )?{re.escape(section_name)}(.*?)(?=(?:## |### |#### )\w|\Z)'
-        match = re.search(pattern, full_report, re.DOTALL)
-        if match:
-            content = match.group(1).strip()
-            bullets = re.findall(r'-\s*(.+)', content)
-            if bullets:
-                return "\n".join([f"- {b.strip()}" for b in bullets[:3]])  # Limit to 3 bullets
-            return content[:500]  # Fallback to first 500 chars
-        return "- Insufficient data available."
 
-    # Generate a competitor table
-    def generate_competitor_table():
-        table_pattern = r'\|.*?\|\n\|.*?\|\n(?:\|.*?\|\n)+'
-        if re.search(table_pattern, full_report):
-            return re.search(table_pattern, full_report).group(0)
-        return (
-            "| Competitor | Strengths | Weaknesses | Market Position |\n"
-            "|------------|-----------|------------|-----------------|\n"
-            "| Company A  | Strong brand | High costs | Leader |\n"
-            "| Company B  | Innovation   | Limited reach | Emerging |\n"
-            "| Company C  | Low prices   | Small scale   | Niche |"
-        )
-    
-    # Build the final report
-    final_report = []
-    for section in sections:
-        final_report.append(f"## {section}")
-        if section == "Competitor Analysis":
-            final_report.append(generate_competitor_table())
-        else:
-            final_report.append(extract_section_content(section))
-        final_report.append("")  # Blank line between sections
-    
-    return "\n".join(final_report)
+    output = []
+    for sec in sections:
+        output.append(f"## {sec}")
+        output.append(get_section(sec))
+        output.append("")
+
+    swot_path = plot_swot()
+    output.append(f"![SWOT Chart]({swot_path})")
+
+    final = "\n".join(output)
+    print("🎯 [FORMATTED REPORT] →\n", final, "\n" + "="*60)
+    return final
