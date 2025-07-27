@@ -1,4 +1,6 @@
 streamlit
+ollama
+tinyllama
 requests
 crawl4ai
 googlesearch-python
