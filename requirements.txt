@@ -2,3 +2,4 @@ streamlit
 requests
 crawl4ai
 googlesearch-python
+ matplotlib
